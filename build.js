@@ -1,22 +1,40 @@
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
-// Build frontend
-console.log('Building frontend...');
-require('child_process').execSync('npm --prefix frontend install && npm --prefix frontend run build', { stdio: 'inherit' });
+try {
+  // Build frontend
+  console.log('Installing dependencies...');
+  execSync('npm install --prefix frontend', { stdio: 'inherit' });
+  
+  console.log('Building frontend...');
+  execSync('npm run build --prefix frontend', { stdio: 'inherit' });
 
-// Copy dist to root
-const srcDir = path.join(__dirname, 'frontend', 'dist');
-const destDir = path.join(__dirname, 'dist');
+  // Copy dist to root
+  const srcDir = path.join(process.cwd(), 'frontend', 'dist');
+  const destDir = path.join(process.cwd(), 'dist');
 
-console.log(`Copying ${srcDir} to ${destDir}...`);
+  console.log(`\nCopying from: ${srcDir}`);
+  console.log(`Copying to: ${destDir}`);
 
-// Remove existing dist if it exists
-if (fs.existsSync(destDir)) {
-  fs.rmSync(destDir, { recursive: true, force: true });
+  // Verify source exists
+  if (!fs.existsSync(srcDir)) {
+    throw new Error(`Source directory not found: ${srcDir}`);
+  }
+
+  // Remove existing dist if it exists
+  if (fs.existsSync(destDir)) {
+    console.log('Removing existing dist directory...');
+    fs.rmSync(destDir, { recursive: true, force: true });
+  }
+
+  // Copy the directory
+  console.log('Copying files...');
+  fs.cpSync(srcDir, destDir, { recursive: true });
+
+  console.log('✓ Build completed successfully!');
+  console.log(`Output directory ready at: ${destDir}`);
+} catch (error) {
+  console.error('Build failed:', error.message);
+  process.exit(1);
 }
-
-// Copy the directory
-fs.cpSync(srcDir, destDir, { recursive: true });
-
-console.log('Build completed successfully!');
