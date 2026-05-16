@@ -10,6 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const useSendGrid = Boolean(process.env.SENDGRID_API_KEY);
 const emailProvider = useSendGrid ? 'sendgrid' : 'gmail';
+const sendGridFrom = process.env.SENDGRID_FROM || process.env.EMAIL_USER;
 
 // Middleware
 app.use(cors());
@@ -74,6 +75,8 @@ app.get('/api/debug', (req, res) => {
     emailUserSet: Boolean(process.env.EMAIL_USER),
     emailPassSet: Boolean(process.env.EMAIL_PASS),
     sendGridKeySet: Boolean(process.env.SENDGRID_API_KEY),
+    sendGridFromSet: Boolean(sendGridFrom),
+    sendGridFrom,
     emailProviderReady,
     emailProviderError: emailProviderReady ? null : emailProviderError,
   });
@@ -107,7 +110,7 @@ app.post('/api/contact', async (req, res) => {
 
   try {
     if (useSendGrid) {
-      if (!process.env.SENDGRID_API_KEY || !process.env.EMAIL_USER) {
+      if (!process.env.SENDGRID_API_KEY || !sendGridFrom || !process.env.EMAIL_USER) {
         console.error('SendGrid or email target is not configured.');
         return res.status(500).json({ error: 'Email service is not configured.' });
       }
@@ -119,9 +122,9 @@ app.post('/api/contact', async (req, res) => {
     }
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: useSendGrid ? sendGridFrom : process.env.EMAIL_USER,
       replyTo: email,
-      to: process.env.EMAIL_USER, // Send to your own email
+      to: process.env.EMAIL_USER,
       subject: `Portfolio Contact: ${subject}`,
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
