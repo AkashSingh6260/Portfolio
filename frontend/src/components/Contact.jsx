@@ -14,6 +14,9 @@ export default function Contact() {
     e.preventDefault();
     setStatus('sending');
 
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+
     try {
       const response = await fetch('https://portfolio-yxmu.onrender.com/api/contact', {
         method: 'POST',
@@ -21,18 +24,29 @@ export default function Contact() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(form),
+        mode: 'cors',
+        signal: controller.signal,
       });
+
+      const data = await response.json().catch(() => null);
 
       if (response.ok) {
         setStatus('sent');
       } else {
-        alert('Failed to send message. Please try again or use direct email.');
+        console.error('Contact error:', data || response.statusText);
+        alert(data?.error || 'Failed to send message. Please try again or use direct email.');
         setStatus('idle');
       }
     } catch (error) {
-      console.error(error);
-      alert('Cannot connect to the server right now.');
+      if (error.name === 'AbortError') {
+        alert('The request timed out. Please try again.');
+      } else {
+        console.error(error);
+        alert('Cannot connect to the server right now.');
+      }
       setStatus('idle');
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   };
 
