@@ -149,10 +149,17 @@ app.post('/api/contact', async (req, res) => {
     res.status(200).json({ success: true, message: 'Message sent successfully!' });
   } catch (error) {
     console.error('Email Error:', error);
-    if (error.message === 'MailTimeout') {
-      return res.status(504).json({ error: 'Email service timed out. Please try again later.' });
+    const errorDetails =
+      error?.response?.body ||
+      error?.response?.headers ||
+      error?.message ||
+      String(error);
+
+    if (error?.message === 'MailTimeout') {
+      return res.status(504).json({ error: 'Email service timed out. Please try again later.', details: errorDetails });
     }
-    res.status(500).json({ error: 'Failed to send message. Please try again later.' });
+
+    res.status(500).json({ error: 'Failed to send message. Please try again later.', details: errorDetails });
   }
 });
 
