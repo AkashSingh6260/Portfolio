@@ -11,6 +11,15 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  res.setTimeout(20000, () => {
+    console.error(`Request timed out: ${req.method} ${req.originalUrl}`);
+    if (!res.headersSent) {
+      res.status(503).json({ error: 'Server timed out. Please try again later.' });
+    }
+  });
+  next();
+});
 
 // Default route (so you don't see "Cannot GET /" in the browser)
 app.get('/', (req, res) => {
@@ -24,6 +33,21 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER, // Your email address
     pass: process.env.EMAIL_PASS, // Your App Password
   },
+  secure: true,
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
+  tls: {
+    rejectUnauthorized: false,
+  },
+});
+
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('Nodemailer verification failed:', error);
+  } else {
+    console.log('Nodemailer is ready to send messages');
+  }
 });
 
 // API Routes
