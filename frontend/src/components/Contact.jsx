@@ -8,45 +8,33 @@ export default function Contact() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
   const [status, setStatus] = useState('idle'); // idle | sending | sent
 
+  const contactApiUrl = import.meta.env.VITE_CONTACT_API_URL || 'https://portfolio-yxmu.onrender.com/api/contact';
+
   const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus('sending');
 
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 15000);
-
     try {
-      const response = await fetch('https://portfolio-yxmu.onrender.com/api/contact', {
+      const response = await fetch(contactApiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(form),
-        mode: 'cors',
-        signal: controller.signal,
       });
-
-      const data = await response.json().catch(() => null);
 
       if (response.ok) {
         setStatus('sent');
       } else {
-        console.error('Contact error:', data || response.statusText);
-        alert(data?.error || 'Failed to send message. Please try again or use direct email.');
+        alert('Failed to send message. Please try again or use direct email.');
         setStatus('idle');
       }
     } catch (error) {
-      if (error.name === 'AbortError') {
-        alert('The request timed out. Please try again.');
-      } else {
-        console.error(error);
-        alert('Cannot connect to the server right now.');
-      }
+      console.error(error);
+      alert('Cannot connect to the server right now.');
       setStatus('idle');
-    } finally {
-      window.clearTimeout(timeoutId);
     }
   };
 
