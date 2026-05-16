@@ -2,15 +2,12 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
-import sgMail from '@sendgrid/mail';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const useSendGrid = Boolean(process.env.SENDGRID_API_KEY);
-const emailProvider = useSendGrid ? 'sendgrid' : 'gmail';
-const sendGridFrom = process.env.SENDGRID_FROM || process.env.EMAIL_USER;
+const emailProvider = 'gmail';
 
 // Middleware
 app.use(cors());
@@ -32,51 +29,40 @@ app.get('/', (req, res) => {
 
 let emailProviderReady = false;
 let emailProviderError = null;
-let transporter = null;
+let transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false,
+  family: 4,
+  auth: {
+    user: process.env.EMAIL_USER, // Your email address
+    pass: process.env.EMAIL_PASS, // Your App Password
+  },
+  requireTLS: true,
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
+  tls: {
+    rejectUnauthorized: false,
+  },
+});
 
-if (useSendGrid) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-  emailProviderReady = true;
-  console.log('SendGrid is configured for email sending');
-} else {
-  transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
-    family: 4,
-    auth: {
-      user: process.env.EMAIL_USER, // Your email address
-      pass: process.env.EMAIL_PASS, // Your App Password
-    },
-    requireTLS: true,
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-    tls: {
-      rejectUnauthorized: false,
-    },
-  });
-
-  transporter.verify((error, success) => {
-    if (error) {
-      emailProviderReady = false;
-      emailProviderError = error.message || String(error);
-      console.error('Nodemailer verification failed:', error);
-    } else {
-      emailProviderReady = true;
-      console.log('Nodemailer is ready to send messages');
-    }
-  });
-}
+transporter.verify((error, success) => {
+  if (error) {
+    emailProviderReady = false;
+    emailProviderError = error.message || String(error);
+    console.error('Nodemailer verification failed:', error);
+  } else {
+    emailProviderReady = true;
+    console.log('Nodemailer is ready to send messages');
+  }
+});
 
 app.get('/api/debug', (req, res) => {
   res.json({
     emailProvider,
     emailUserSet: Boolean(process.env.EMAIL_USER),
     emailPassSet: Boolean(process.env.EMAIL_PASS),
-    sendGridKeySet: Boolean(process.env.SENDGRID_API_KEY),
-    sendGridFromSet: Boolean(sendGridFrom),
-    sendGridFrom,
     emailProviderReady,
     emailProviderError: emailProviderReady ? null : emailProviderError,
   });
@@ -85,15 +71,6 @@ app.get('/api/debug', (req, res) => {
 const sendMailWithTimeout = (mailOptions, timeoutMs = 15000) => {
   return Promise.race([
     transporter.sendMail(mailOptions),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('MailTimeout')), timeoutMs)
-    ),
-  ]);
-};
-
-const sendSendGridWithTimeout = (msg, timeoutMs = 15000) => {
-  return Promise.race([
-    sgMail.send(msg),
     new Promise((_, reject) =>
       setTimeout(() => reject(new Error('MailTimeout')), timeoutMs)
     ),
@@ -109,20 +86,13 @@ app.post('/api/contact', async (req, res) => {
   }
 
   try {
-    if (useSendGrid) {
-      if (!process.env.SENDGRID_API_KEY || !sendGridFrom || !process.env.EMAIL_USER) {
-        console.error('SendGrid or email target is not configured.');
-        return res.status(500).json({ error: 'Email service is not configured.' });
-      }
-    } else {
-      if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-        console.error('Email credentials are missing.');
-        return res.status(500).json({ error: 'Email service is not configured.' });
-      }
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.error('Email credentials are missing.');
+      return res.status(500).json({ error: 'Email service is not configured.' });
     }
 
     const mailOptions = {
-      from: useSendGrid ? sendGridFrom : process.env.EMAIL_USER,
+      from: process.env.EMAIL_USER,
       replyTo: email,
       to: process.env.EMAIL_USER,
       subject: `Portfolio Contact: ${subject}`,
@@ -140,11 +110,7 @@ app.post('/api/contact', async (req, res) => {
       `,
     };
 
-    if (useSendGrid) {
-      await sendSendGridWithTimeout(mailOptions, 15000);
-    } else {
-      await sendMailWithTimeout(mailOptions, 15000);
-    }
+    await sendMailWithTimeout(mailOptions, 15000);
 
     res.status(200).json({ success: true, message: 'Message sent successfully!' });
   } catch (error) {
