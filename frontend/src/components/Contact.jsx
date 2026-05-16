@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Section, SectionTitle } from './UI';
 import { personalInfo, socialLinks } from '../data/portfolio';
@@ -8,32 +8,41 @@ export default function Contact() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
   const [status, setStatus] = useState('idle'); // idle | sending | sent
 
-  const contactApiUrl = import.meta.env.VITE_CONTACT_API_URL || 'https://portfolio-yxmu.onrender.com/api/contact';
+  // API URL must be set via VITE_CONTACT_API_URL in your frontend's environment variables.
+  // e.g. in Vercel dashboard: VITE_CONTACT_API_URL = https://your-backend.onrender.com/api/contact
+  const contactApiUrl = import.meta.env.VITE_CONTACT_API_URL;
 
   const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!contactApiUrl) {
+      console.error('VITE_CONTACT_API_URL is not set. Add it to your frontend environment variables.');
+      alert('Contact form is not configured. Please email me directly at ' + (typeof personalInfo !== 'undefined' ? personalInfo.email : 'akki.akashsingh2005@gmail.com'));
+      return;
+    }
+
     setStatus('sending');
 
     try {
       const response = await fetch(contactApiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
 
       if (response.ok) {
         setStatus('sent');
       } else {
-        alert('Failed to send message. Please try again or use direct email.');
+        const data = await response.json().catch(() => ({}));
+        console.error('Server error:', data);
+        alert(data?.error || 'Failed to send message. Please try again or email me directly.');
         setStatus('idle');
       }
     } catch (error) {
-      console.error(error);
-      alert('Cannot connect to the server right now.');
+      console.error('Fetch error:', error);
+      alert('Cannot reach the server. Please email me directly at akki.akashsingh2005@gmail.com');
       setStatus('idle');
     }
   };

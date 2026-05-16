@@ -1,17 +1,35 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const emailProvider = 'gmail';
 
-// Middleware
-app.use(cors());
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// Set ALLOWED_ORIGIN in your Render dashboard (your Vercel frontend URL).
+// Multiple origins: comma-separated — e.g. "https://a.vercel.app,https://custom.com"
+const allowedOrigins = process.env.ALLOWED_ORIGIN
+  ? process.env.ALLOWED_ORIGIN.split(',').map(o => o.trim())
+  : ['http://localhost:5173', 'http://localhost:3000'];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true); // server-to-server / Postman
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin '${origin}' not allowed`));
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type'],
+  })
+);
+
 app.use(express.json());
+
+// Request timeout
 app.use((req, res, next) => {
   res.setTimeout(20000, () => {
     console.error(`Request timed out: ${req.method} ${req.originalUrl}`);
@@ -22,62 +40,27 @@ app.use((req, res, next) => {
   next();
 });
 
-// Default route (so you don't see "Cannot GET /" in the browser)
+// ── Resend client ─────────────────────────────────────────────────────────────
+// Uses HTTPS (not SMTP) — works on all cloud platforms including Render free tier.
+// Get your free API key at https://resend.com → 100 emails/day free.
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// ── Health check ──────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
-  res.send('Backend Server is running! The contact API is ready.');
+  res.send('✅ Backend Server is running! Contact API is ready.');
 });
 
-let emailProviderReady = false;
-let emailProviderError = null;
-let transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
-  family: 4,
-  auth: {
-    user: process.env.EMAIL_USER, // Your email address
-    pass: process.env.EMAIL_PASS, // Your App Password
-  },
-  requireTLS: true,
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-  tls: {
-    rejectUnauthorized: false,
-  },
-});
-
-transporter.verify((error, success) => {
-  if (error) {
-    emailProviderReady = false;
-    emailProviderError = error.message || String(error);
-    console.error('Nodemailer verification failed:', error);
-  } else {
-    emailProviderReady = true;
-    console.log('Nodemailer is ready to send messages');
-  }
-});
-
+// ── Debug route (safe — no secrets exposed) ───────────────────────────────────
 app.get('/api/debug', (req, res) => {
   res.json({
-    emailProvider,
+    resendKeySet: Boolean(process.env.RESEND_API_KEY),
     emailUserSet: Boolean(process.env.EMAIL_USER),
-    emailPassSet: Boolean(process.env.EMAIL_PASS),
-    emailProviderReady,
-    emailProviderError: emailProviderReady ? null : emailProviderError,
+    allowedOrigins,
+    status: 'ok',
   });
 });
 
-const sendMailWithTimeout = (mailOptions, timeoutMs = 15000) => {
-  return Promise.race([
-    transporter.sendMail(mailOptions),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('MailTimeout')), timeoutMs)
-    ),
-  ]);
-};
-
-// API Routes
+// ── Contact API ───────────────────────────────────────────────────────────────
 app.post('/api/contact', async (req, res) => {
   const { name, email, subject, message } = req.body;
 
@@ -85,50 +68,77 @@ app.post('/api/contact', async (req, res) => {
     return res.status(400).json({ error: 'Please provide all required fields.' });
   }
 
-  try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.error('Email credentials are missing.');
-      return res.status(500).json({ error: 'Email service is not configured.' });
-    }
+  if (!process.env.RESEND_API_KEY) {
+    console.error('RESEND_API_KEY is not set in environment variables.');
+    return res.status(500).json({ error: 'Email service is not configured.' });
+  }
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
+  if (!process.env.EMAIL_USER) {
+    console.error('EMAIL_USER is not set in environment variables.');
+    return res.status(500).json({ error: 'Email recipient is not configured.' });
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: 'Portfolio Contact <onboarding@resend.dev>', // use this until you verify a domain
       replyTo: email,
       to: process.env.EMAIL_USER,
       subject: `Portfolio Contact: ${subject}`,
       html: `
-        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-          <h2 style="color: #ffb400;">New Message from Portfolio</h2>
-          <p><strong>Name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Subject:</strong> ${subject}</p>
-          <p><strong>Message:</strong></p>
-          <blockquote style="border-left: 4px solid #ffb400; padding-left: 10px; background: #f9f9f9;">
-            ${message}
-          </blockquote>
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #ffb400; border-bottom: 2px solid #ffb400; padding-bottom: 8px;">
+            📬 New Message from Portfolio
+          </h2>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 8px; font-weight: bold; width: 100px;">Name</td>
+              <td style="padding: 8px;">${name}</td>
+            </tr>
+            <tr style="background: #f9f9f9;">
+              <td style="padding: 8px; font-weight: bold;">Email</td>
+              <td style="padding: 8px;"><a href="mailto:${email}">${email}</a></td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Subject</td>
+              <td style="padding: 8px;">${subject}</td>
+            </tr>
+          </table>
+          <div style="margin-top: 16px;">
+            <p style="font-weight: bold; margin-bottom: 4px;">Message:</p>
+            <blockquote style="border-left: 4px solid #ffb400; padding: 12px 16px; background: #fffbf0; margin: 0; border-radius: 0 4px 4px 0;">
+              ${message.replace(/\n/g, '<br>')}
+            </blockquote>
+          </div>
+          <p style="color: #999; font-size: 12px; margin-top: 24px;">
+            Sent via your Portfolio contact form
+          </p>
         </div>
       `,
-    };
+    });
 
-    await sendMailWithTimeout(mailOptions, 15000);
-
-    res.status(200).json({ success: true, message: 'Message sent successfully!' });
-  } catch (error) {
-    console.error('Email Error:', error);
-    const errorDetails =
-      error?.response?.body ||
-      error?.response?.headers ||
-      error?.message ||
-      String(error);
-
-    if (error?.message === 'MailTimeout') {
-      return res.status(504).json({ error: 'Email service timed out. Please try again later.', details: errorDetails });
+    if (error) {
+      console.error('Resend API error:', error);
+      return res.status(500).json({
+        error: 'Failed to send message. Please try again later.',
+        details: error.message,
+      });
     }
 
-    res.status(500).json({ error: 'Failed to send message. Please try again later.', details: errorDetails });
+    console.log('Email sent successfully, id:', data?.id);
+    res.status(200).json({ success: true, message: 'Message sent successfully!' });
+  } catch (err) {
+    console.error('Unexpected error sending email:', err);
+    res.status(500).json({
+      error: 'Failed to send message. Please try again later.',
+      details: err.message,
+    });
   }
 });
 
+// ── Start server ──────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`   Allowed origins: ${allowedOrigins.join(', ')}`);
+  console.log(`   Resend API key: ${process.env.RESEND_API_KEY ? '✅ set' : '❌ MISSING'}`);
+  console.log(`   Email recipient: ${process.env.EMAIL_USER ? '✅ set' : '❌ MISSING'}`);
 });
