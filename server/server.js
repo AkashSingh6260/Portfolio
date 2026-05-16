@@ -26,6 +26,15 @@ app.get('/', (req, res) => {
   res.send('Backend Server is running! The contact API is ready.');
 });
 
+app.get('/api/debug', (req, res) => {
+  res.json({
+    emailUserSet: Boolean(process.env.EMAIL_USER),
+    emailPassSet: Boolean(process.env.EMAIL_PASS),
+    transporterReady,
+    transporterError: transporterReady ? null : transporterError,
+  });
+});
+
 // Nodemailer setup
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -42,10 +51,16 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+let transporterReady = false;
+let transporterError = null;
+
 transporter.verify((error, success) => {
   if (error) {
+    transporterReady = false;
+    transporterError = error.message || String(error);
     console.error('Nodemailer verification failed:', error);
   } else {
+    transporterReady = true;
     console.log('Nodemailer is ready to send messages');
   }
 });
