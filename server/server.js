@@ -50,6 +50,15 @@ transporter.verify((error, success) => {
   }
 });
 
+const sendMailWithTimeout = (mailOptions, timeoutMs = 15000) => {
+  return Promise.race([
+    transporter.sendMail(mailOptions),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('MailTimeout')), timeoutMs)
+    ),
+  ]);
+};
+
 // API Routes
 app.post('/api/contact', async (req, res) => {
   const { name, email, subject, message } = req.body;
@@ -59,8 +68,14 @@ app.post('/api/contact', async (req, res) => {
   }
 
   try {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.error('Email credentials are missing.');
+      return res.status(500).json({ error: 'Email service is not configured.' });
+    }
+
     const mailOptions = {
-      from: email,
+      from: process.env.EMAIL_USER,
+      replyTo: email,
       to: process.env.EMAIL_USER, // Send to your own email
       subject: `Portfolio Contact: ${subject}`,
       html: `
@@ -77,10 +92,13 @@ app.post('/api/contact', async (req, res) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    await sendMailWithTimeout(mailOptions, 15000);
     res.status(200).json({ success: true, message: 'Message sent successfully!' });
   } catch (error) {
     console.error('Email Error:', error);
+    if (error.message === 'MailTimeout') {
+      return res.status(504).json({ error: 'Email service timed out. Please try again later.' });
+    }
     res.status(500).json({ error: 'Failed to send message. Please try again later.' });
   }
 });
