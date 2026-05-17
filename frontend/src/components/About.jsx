@@ -71,33 +71,19 @@ export default function About() {
           <div className="relative w-72 h-72 mx-auto">
             <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-accent/20 to-transparent animate-glow-pulse" />
             <div className="relative glass-card rounded-2xl w-full h-full flex items-center justify-center overflow-hidden border border-accent/20">
-              {/* Abstract code pattern */}
-              <div className="absolute inset-0 opacity-10">
-                {Array.from({ length: 12 }).map((_, i) => (
-                  <motion.div
-                    key={i}
-                    className="absolute font-mono text-accent text-xs"
-                    style={{
-                      left: `${(i % 4) * 25}%`,
-                      top: `${Math.floor(i / 4) * 33}%`,
-                    }}
-                    animate={{ opacity: [0.3, 1, 0.3] }}
-                    transition={{ duration: 2 + i * 0.3, repeat: Infinity }}
-                  >
-                    {['<AI/>', '{code}', '(dev)', '[]=>{}', '<ML/>', 'fn()', '{}', '&&', '||', '=>', '...', '***'][i]}
-                  </motion.div>
-                ))}
-              </div>
-
-              {/* Initials */}
-              <div className="relative z-10 text-center">
-                <div className="font-display font-black text-7xl gradient-text glow-text">
-                  AS
-                </div>
-                <div className="text-text-secondary text-sm font-mono mt-2">
-                  Full Stack · AI/ML · DSA
-                </div>
-              </div>
+              <motion.img 
+                src="/profile.jpg" 
+                alt="Akash Singh" 
+                className="w-full h-full object-cover rounded-2xl"
+                whileHover={{ scale: 1.05 }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
+              />
+              
+              {/* Subtle inner shadow overlay to blend edges */}
+              <div className="absolute inset-0 rounded-2xl shadow-[inset_0_0_40px_rgba(0,0,0,0.4)] pointer-events-none" />
+              
+              {/* Bottom gradient fade */}
+              <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-bg via-bg/50 to-transparent pointer-events-none" />
             </div>
 
             {/* Floating badge */}
